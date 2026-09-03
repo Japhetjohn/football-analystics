@@ -280,18 +280,18 @@ async def back_to_start(callback: CallbackQuery):
 @router.callback_query(MenuCB.filter(F.action == "today"))
 async def show_today_matches(callback: CallbackQuery):
     await callback.answer("Loading today's matches...", show_alert=False)
-    await safe_edit_text(callback, "⏳ <b>LOADING MATCHES</b>\n\nRetrieving today's fixtures...")
+    msg = await callback.message.answer("⏳ <b>LOADING MATCHES</b>\n\nRetrieving today's fixtures...", parse_mode="HTML")
     
     try:
         provider = APIFootballProvider(settings.api_football_key)
         today = datetime.utcnow().strftime("%Y-%m-%d")
         fixtures = await provider.get_scheduled_fixtures(today)
     except Exception:
-        await safe_edit_text(callback, "⚠️ <b>UNABLE TO FETCH DATA</b>\n\nPlease tap Refresh or try again in a moment.", reply_markup=get_start_keyboard())
+        await msg.edit_text("⚠️ <b>UNABLE TO FETCH DATA</b>\n\nPlease tap Refresh or try again in a moment.", reply_markup=get_start_keyboard(), parse_mode="HTML")
         return
         
     if not fixtures:
-        await safe_edit_text(callback, "⚽ <b>NO MATCHES FOUND</b>\n\nThere are no fixtures available\nfor this selection.", reply_markup=get_start_keyboard())
+        await msg.edit_text("⚽ <b>NO MATCHES FOUND</b>\n\nThere are no fixtures available\nfor this selection.", reply_markup=get_start_keyboard(), parse_mode="HTML")
         return
     
     league_counts = {}
@@ -304,7 +304,7 @@ async def show_today_matches(callback: CallbackQuery):
                 league_counts[fx.competition_id] = (league_counts[fx.competition_id][0], league_counts[fx.competition_id][1] + 1)
                 
     text = f"⚡ <b>TODAY'S MATCHES</b>\n\n📅 {datetime.utcnow().strftime('%A, %d %B')}\n\n━━━━━━━━━━━━━━━━━━\n\nSelect a league to browse today's fixtures."
-    await safe_edit_text(callback, text, reply_markup=get_leagues_keyboard(league_counts))
+    await msg.edit_text(text, reply_markup=get_leagues_keyboard(league_counts), parse_mode="HTML")
 
 @router.callback_query(LeagueCB.filter())
 async def show_league_matches(callback: CallbackQuery, callback_data: LeagueCB):
@@ -312,14 +312,19 @@ async def show_league_matches(callback: CallbackQuery, callback_data: LeagueCB):
     lg_id = callback_data.id
     page = callback_data.page
     
-    await safe_edit_text(callback, "⏳ <b>LOADING LEAGUE FIXTURES</b>\n\nOrganizing matches...")
+    is_refresh = "Today's Fixtures" in (callback.message.text or "")
+    if is_refresh:
+        msg = callback.message
+        await msg.edit_text("⏳ <b>LOADING LEAGUE FIXTURES</b>\n\nOrganizing matches...", parse_mode="HTML")
+    else:
+        msg = await callback.message.answer("⏳ <b>LOADING LEAGUE FIXTURES</b>\n\nOrganizing matches...", parse_mode="HTML")
     
     try:
         provider = APIFootballProvider(settings.api_football_key)
         today = datetime.utcnow().strftime("%Y-%m-%d")
         all_fixtures = await provider.get_scheduled_fixtures(today)
     except Exception:
-        await safe_edit_text(callback, "⚠️ <b>UNABLE TO FETCH DATA</b>\n\nPlease try again in a moment.", reply_markup=get_start_keyboard())
+        await msg.edit_text("⚠️ <b>UNABLE TO FETCH DATA</b>\n\nPlease try again in a moment.", reply_markup=get_start_keyboard(), parse_mode="HTML")
         return
         
     lg_fixtures = [fx for fx in all_fixtures if fx.competition_id == lg_id]
@@ -343,7 +348,7 @@ async def show_league_matches(callback: CallbackQuery, callback_data: LeagueCB):
         
     c_name = page_fixtures[0].competition_name if page_fixtures and page_fixtures[0].competition_name else f"LEAGUE {lg_id}"
     text = f"🏆 <b>{c_name}</b>\n\n📅 Today's Fixtures\n\n━━━━━━━━━━━━━━━━━━\n\nSelect a match for analysis."
-    await safe_edit_text(callback, text, reply_markup=get_fixtures_keyboard(fx_data, lg_id, page, total_pages))
+    await msg.edit_text(text, reply_markup=get_fixtures_keyboard(fx_data, lg_id, page, total_pages), parse_mode="HTML")
 
 @router.callback_query(FixtureCB.filter())
 async def select_fixture(callback: CallbackQuery, callback_data: FixtureCB):

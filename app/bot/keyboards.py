@@ -29,7 +29,8 @@ def get_start_keyboard() -> InlineKeyboardMarkup:
 def get_leagues_keyboard(league_counts: Dict[int, tuple]) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for lg_id, (name, count) in league_counts.items():
-        text = f"{name} ({count})"
+        short_name = name[:16] + ".." if len(name) > 18 else name
+        text = f"{short_name} ({count})"
         builder.add(InlineKeyboardButton(text=text, callback_data=LeagueCB(id=lg_id, page=1).pack()))
     builder.adjust(2)
     builder.row(InlineKeyboardButton(text="🔙 Home", callback_data=MenuCB(action="start").pack()))
@@ -38,7 +39,9 @@ def get_leagues_keyboard(league_counts: Dict[int, tuple]) -> InlineKeyboardMarku
 def get_fixtures_keyboard(fixtures: List[Dict[str, Any]], lg_id: int, page: int = 1, total_pages: int = 1) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for fx in fixtures:
-        text = f"{fx['time']}  {fx['home_name']} vs {fx['away_name']}"
+        h_short = fx['home_name'][:12] + ".." if len(fx['home_name']) > 13 else fx['home_name']
+        a_short = fx['away_name'][:12] + ".." if len(fx['away_name']) > 13 else fx['away_name']
+        text = f"{fx['time']} {h_short} v {a_short}"
         builder.row(InlineKeyboardButton(text=text, callback_data=FixtureCB(id=fx['id'], hid=fx['home_id'], aid=fx['away_id']).pack()))
     
     nav_row = []
