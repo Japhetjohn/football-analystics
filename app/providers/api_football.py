@@ -29,37 +29,48 @@ class APIFootballProvider(DataProvider):
             data = json.loads(response.read().decode('utf-8'))
             return data
 
-    async def get_fixtures(self) -> List[Fixture]:
-        """
-        Pulls actual live fixtures from API-Football.
-        """
-        data = await asyncio.to_thread(self._sync_get, "fixtures?live=all")
+    def _parse_fixtures(self, data: Dict) -> List[Fixture]:
         fixtures = []
         for item in data.get("response", []):
             fx = item.get("fixture", {})
             teams = item.get("teams", {})
             goals = item.get("goals", {})
-            
             try:
                 date_str = fx.get("date")
-                if date_str.endswith("Z"):
+                if date_str and date_str.endswith("Z"):
                     date_str = date_str.replace("Z", "+00:00")
-                    
-                f = Fixture(
+                
+                status_short = fx.get("status", {}).get("short", "TBD")
+                # Default to 0 instead of None if match is valid but missing score
+                fixtures.append(Fixture(
                     id=fx.get("id"),
                     provider=self.name,
                     home_team_id=teams.get("home", {}).get("id"),
                     away_team_id=teams.get("away", {}).get("id"),
-                    home_score=goals.get("home"),
+                    home_score=goals.get("home"),# allows None if unplayed
                     away_score=goals.get("away"),
-                    start_time=datetime.fromisoformat(date_str),
+                    start_time=datetime.fromisoformat(date_str) if date_str else datetime.utcnow(),
                     competition_id=item.get("league", {}).get("id"),
-                    status=fx.get("status", {}).get("short")
-                )
-                fixtures.append(f)
+                    status=status_short
+                ))
             except Exception as e:
                 continue
         return fixtures
+
+    async def get_fixtures(self) -> List[Fixture]:
+        """ Pulls actual live fixtures from API-Football. """
+        data = await asyncio.to_thread(self._sync_get, "fixtures?live=all")
+        return self._parse_fixtures(data)
+
+    async def get_scheduled_fixtures(self, date: str) -> List[Fixture]:
+        """ Pulls upcoming fixtures for a specific date (YYYY-MM-DD). """
+        data = await asyncio.to_thread(self._sync_get, f"fixtures?date={date}")
+        return self._parse_fixtures(data)
+
+    async def get_head_to_head(self, h2h_key: str) -> List[Fixture]:
+        """ Pulls H2H matches historically (e.g., '33-34'). """
+        data = await asyncio.to_thread(self._sync_get, f"fixtures/headtohead?h2h={h2h_key}")
+        return self._parse_fixtures(data)
 
     async def get_team_stats(self, fixture_id: int) -> List[TeamStats]:
         """
