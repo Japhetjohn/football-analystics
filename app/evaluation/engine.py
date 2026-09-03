@@ -21,15 +21,15 @@ class EvaluationEngine:
             test_match = matches[i]
             
             model.fit(train_set)
+            # Standard predictive output from Engine 7 or 8
             probs = model.predict(test_match['home'], test_match['away'])
             
             actual_outcome = test_match.get('outcome', 1) 
-            prob_array = np.array([0.4, 0.3, 0.3]) # mock
             
             results.append({
                 "match_id": test_match['id'],
-                "brier": self.brier_score(prob_array, actual_outcome),
-                "logloss": self.log_loss(prob_array, actual_outcome)
+                "brier": self.brier_score(probs, actual_outcome),
+                "logloss": self.log_loss(probs, actual_outcome)
             })
         return results
 
