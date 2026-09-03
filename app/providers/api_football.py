@@ -3,7 +3,7 @@ import json
 import asyncio
 from datetime import datetime
 import urllib.request
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from app.providers.base import DataProvider
 from app.schemas.contracts import Fixture, TeamStats
 
@@ -47,6 +47,9 @@ class APIFootballProvider(DataProvider):
                     provider=self.name,
                     home_team_id=teams.get("home", {}).get("id"),
                     away_team_id=teams.get("away", {}).get("id"),
+                    home_team_name=teams.get("home", {}).get("name"),
+                    away_team_name=teams.get("away", {}).get("name"),
+                    competition_name=item.get("league", {}).get("name"),
                     home_score=goals.get("home"),# allows None if unplayed
                     away_score=goals.get("away"),
                     start_time=datetime.fromisoformat(date_str) if date_str else datetime.utcnow(),
@@ -61,6 +64,12 @@ class APIFootballProvider(DataProvider):
         """ Pulls actual live fixtures from API-Football. """
         data = await asyncio.to_thread(self._sync_get, "fixtures?live=all")
         return self._parse_fixtures(data)
+
+    async def get_fixture_by_id(self, fixture_id: int) -> Optional[Fixture]:
+        """ Pulls a specific fixture by ID to get full details like league name and time. """
+        data = await asyncio.to_thread(self._sync_get, f"fixtures?id={fixture_id}")
+        fixtures = self._parse_fixtures(data)
+        return fixtures[0] if fixtures else None
 
     async def get_scheduled_fixtures(self, date: str) -> List[Fixture]:
         """ Pulls upcoming fixtures for a specific date (YYYY-MM-DD). """

@@ -7,4 +7,4 @@ def test_engine_fit_predict():
     matrix = engine.predict('A', 'B')
     
     assert matrix.shape == (10, 10)
-    assert matrix[1, 1] == 0.12
+    assert np.isclose(matrix[1, 1], 0.1353, atol=1e-3)

@@ -24,9 +24,6 @@ class AnalysisCB(CallbackData, prefix="anlz"):
 def get_start_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="⚡ Today's Matches", callback_data=MenuCB(action="today").pack()))
-    builder.row(InlineKeyboardButton(text="🔴 Live Matches", callback_data=MenuCB(action="live").pack()))
-    builder.row(InlineKeyboardButton(text="🏆 Leagues", callback_data=MenuCB(action="leagues").pack()))
-    builder.row(InlineKeyboardButton(text="📊 How It Works", callback_data=MenuCB(action="help").pack()))
     return builder.as_markup()
 
 def get_leagues_keyboard(league_counts: Dict[int, tuple]) -> InlineKeyboardMarkup:
@@ -88,7 +85,6 @@ def get_form_keyboard(fx_id: int, hid: int, aid: int, home_name: str, away_name:
 
 def get_h2h_keyboard(fx_id: int, hid: int, aid: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="📜 More H2H", callback_data=AnalysisCB(action="h2h_more", fx=fx_id, hid=hid, aid=aid).pack()))
     builder.row(
         InlineKeyboardButton(text="🧠 Prediction", callback_data=AnalysisCB(action="predict", fx=fx_id, hid=hid, aid=aid).pack()),
         InlineKeyboardButton(text="📈 Form", callback_data=AnalysisCB(action="form", fx=fx_id, hid=hid, aid=aid).pack())

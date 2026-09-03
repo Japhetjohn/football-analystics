@@ -7,6 +7,9 @@ class Fixture(BaseModel):
     provider: str
     home_team_id: int
     away_team_id: int
+    home_team_name: Optional[str] = None
+    away_team_name: Optional[str] = None
+    competition_name: Optional[str] = None
     home_score: Optional[int] = None
     away_score: Optional[int] = None
     start_time: datetime

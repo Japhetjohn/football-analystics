@@ -2,11 +2,12 @@ import asyncio
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
+import numpy as np
 
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
-import numpy as np
+from aiogram.exceptions import TelegramBadRequest
 
 from app.bot.keyboards import (
     MenuCB, LeagueCB, FixtureCB, AnalysisCB,
@@ -41,7 +42,7 @@ class AnalysisResult:
     failed_sources: List[str] = field(default_factory=list)
 
 def format_start_menu() -> str:
-    return """⚽ *FOOTBALL ANALYTICS*
+    return """⚽ <b>FOOTBALL ANALYTICS</b>
 
 Welcome to your football intelligence desk.
 
@@ -49,7 +50,7 @@ Turn match data into meaningful insights.
 
 ━━━━━━━━━━━━━━━━━━
 
-📊 *What we analyze*
+📊 <b>What we analyze</b>
 
 • Team form
 • Head-to-head history
@@ -60,7 +61,7 @@ Turn match data into meaningful insights.
 
 ━━━━━━━━━━━━━━━━━━
 
-🧠 *Statistical + Machine Learning Analysis*
+🧠 <b>Statistical + Machine Learning Analysis</b>
 
 Select a match to get started.
 
@@ -85,32 +86,50 @@ def format_prediction_card(res: AnalysisResult) -> str:
 
     has_prob = h_p is not None
 
-    card = f"""🧠 *MATCH ANALYSIS*
+    card = f"""🧠 <b>MATCH ANALYSIS</b>
 
 🏆 {res.league}
 📅 Today • {res.time}
 
 ━━━━━━━━━━━━━━━━━━
 
-⚽ *{res.home_name}*
+⚽ <b>{res.home_name}</b>
         vs
-🔵 *{res.away_name}*
+🔵 <b>{res.away_name}</b>
 
 ━━━━━━━━━━━━━━━━━━\n"""
 
     if has_prob:
+        if h_p > d_p and h_p > a_p:
+            pred_winner = res.home_name
+        elif a_p > h_p and a_p > d_p:
+            pred_winner = res.away_name
+        else:
+            pred_winner = "Draw"
+            
+        h_score_pred = int(round(res.home_xg)) if res.home_xg is not None else 0
+        a_score_pred = int(round(res.away_xg)) if res.away_xg is not None else 0
+        
         card += f"""
-📊 *WIN PROBABILITY*
+🎯 <b>FINAL PREDICTION</b>
 
-🔴 {res.home_name[:10]:<10} *{fmt_pct(h_p)}*  {get_bar(h_p)}
-⚪ {'Draw':<10} *{fmt_pct(d_p)}*  {get_bar(d_p)}
-🔵 {res.away_name[:10]:<10} *{fmt_pct(a_p)}*  {get_bar(a_p)}
+<b>Predicted Winner:</b> {pred_winner}
+<b>Predicted Score:</b> {res.home_name} {h_score_pred} - {a_score_pred} {res.away_name}
+
+━━━━━━━━━━━━━━━━━━
+"""
+        card += f"""
+📊 <b>WIN PROBABILITY</b>
+
+🔴 {res.home_name[:10]:<10} <b>{fmt_pct(h_p)}</b>  {get_bar(h_p)}
+⚪ {'Draw':<10} <b>{fmt_pct(d_p)}</b>  {get_bar(d_p)}
+🔵 {res.away_name[:10]:<10} <b>{fmt_pct(a_p)}</b>  {get_bar(a_p)}
 
 ━━━━━━━━━━━━━━━━━━
 """
     else:
         card += """
-⚠️ *ANALYSIS UNAVAILABLE*
+⚠️ <b>ANALYSIS UNAVAILABLE</b>
 
 There isn't enough reliable data to
 generate this match prediction.
@@ -122,85 +141,106 @@ match information below.
 """
 
     card += f"""
-⚽ *EXPECTED GOALS*
+⚽ <b>EXPECTED GOALS</b>
 
 🔴 {res.home_name[:10]:<10} {fmt_xg(res.home_xg)}
 🔵 {res.away_name[:10]:<10} {fmt_xg(res.away_xg)}
 """
     if res.home_xg is None:
-        card += "\n_— Expected goals data unavailable_\n"
+        card += "\n<i>— Expected goals data unavailable</i>\n"
 
     card += "\n━━━━━━━━━━━━━━━━━━\n"
 
     if has_prob:
         card += f"""
-🧠 *MODEL VERDICT*
+🧠 <b>MODEL VERDICT</b>
 
 {res.model_name or "Statistical model only"}
 
-*Confidence: {res.confidence or "—"}*
+<b>Confidence: {res.confidence or "—"}</b>
 
 ━━━━━━━━━━━━━━━━━━
 
-_Data-driven prediction • Not a guarantee_
+<i>Data-driven prediction • Not a guarantee</i>
 """
     return card
 
-def format_team_form(home_name: str, away_name: str) -> str:
-    return f"""📈 *RECENT TEAM FORM*
+def format_team_form(home_name: str, away_name: str, home_form: str, away_form: str) -> str:
+    def parse_form(f_str):
+        if f_str is None: return "Recent form data is currently unavailable."
+        res = []
+        for char in f_str[-5:]:
+            if char == 'W': res.append("🟢 W")
+            elif char == 'D': res.append("🟡 D")
+            elif char == 'L': res.append("🔴 L")
+        return "   ".join(res) if res else "Recent form data is currently unavailable."
 
-🔴 *{home_name}*
-Last 3 available matches
-🟢 W   🟡 D   🔴 L
+    return f"""📈 <b>RECENT TEAM FORM</b>
 
-━━━━━━━━━━━━━━━━━━
-
-🔵 *{away_name}*
-Recent form data is currently unavailable."""
-
-def format_h2h(home_name: str, away_name: str) -> str:
-    return f"""⚔️ *HEAD-TO-HEAD*
-
-{home_name} vs {away_name}
+🔴 <b>{home_name}</b>
+{parse_form(home_form)}
 
 ━━━━━━━━━━━━━━━━━━
 
-No previous meetings were found
-for these teams."""
+🔵 <b>{away_name}</b>
+{parse_form(away_form)}"""
 
-def format_statistics(home_name: str, away_name: str) -> str:
-    return f"""📊 *TEAM STATISTICS*
+def format_h2h(home_name: str, away_name: str, h2h_list: List[Any], hid: int) -> str:
+    if not h2h_list:
+        return f"⚔️ <b>HEAD-TO-HEAD</b>\n\n{home_name} vs {away_name}\n\n━━━━━━━━━━━━━━━━━━\n\nNo previous meetings were found\nfor these teams."
+    
+    text = f"⚔️ <b>HEAD-TO-HEAD</b>\n\n{home_name} vs {away_name}\n\n━━━━━━━━━━━━━━━━━━\n\n<b>Last {min(5, len(h2h_list))} Meetings</b>\n\n"
+    for m in h2h_list[:5]:
+        home_is_our_home = m.home_team_id == hid
+        h_score = m.home_score if m.home_score is not None else 0
+        a_score = m.away_score if m.away_score is not None else 0
+        
+        if home_is_our_home:
+            text += f"🔴 {home_name[:10]:<10} {h_score}–{a_score}  {away_name[:10]:>10} 🔵\n"
+        else:
+            # They are reversed in this historical match
+            text += f"🔵 {away_name[:10]:<10} {h_score}–{a_score}  {home_name[:10]:>10} 🔴\n"
+    return text
 
-🔴 *{home_name}*
-_Last updated: 6 hours ago_
+def format_statistics(home_name: str, away_name: str, home_stats: Dict[str, Any], away_stats: Dict[str, Any]) -> str:
+    text = f"📊 <b>TEAM STATISTICS</b>\n\n"
+    
+    def render_team(name, stats, icon):
+        if not stats:
+            return f"{icon} <b>{name}</b>\n<i>Data unavailable</i>\n"
+        
+        shots = stats.get('Total Shots', '—')
+        s_on = stats.get('Shots on Goal', '—')
+        poss = stats.get('Ball Possession', '—')
+        
+        return f"""{icon} <b>{name}</b>
 
 📈 ATTACK
-• Goals / match      1.82
-• xG                 1.74
-
-🛡 DEFENCE
-• Goals conceded     0.91
-
-━━━━━━━━━━━━━━━━━━
-
-🔵 *{away_name}*
-_Data unavailable_"""
+• Shots              {shots}
+• On Target          {s_on}
+• Possession         {poss}
+"""
+    
+    text += render_team(home_name, home_stats, "🔴")
+    text += "\n━━━━━━━━━━━━━━━━━━\n\n"
+    text += render_team(away_name, away_stats, "🔵")
+    return text
 
 def format_model_details() -> str:
-    return """🔬 *MODEL INSIGHTS*
+    return """🔬 <b>MODEL INSIGHTS</b>
 
 This analysis combines statistical
 and machine-learning signals.
 
 ━━━━━━━━━━━━━━━━━━
 
-🧮 *Statistical Model*
+🧮 <b>Statistical Model</b>
 Dixon-Coles / Poisson
 
-🤖 *Machine Learning*
+🤖 <b>Machine Learning</b>
 XGBoost Classifier
 
-📊 *Signals Used*
+📊 <b>Signals Used</b>
 • Recent team form
 • Home / away performance
 • H2H history
@@ -219,51 +259,69 @@ guaranteed outcomes."""
 # HANDLERS
 # ==========================================
 
+async def safe_edit_text(callback: CallbackQuery, text: str, reply_markup=None):
+    try:
+        await callback.message.edit_text(text, reply_markup=reply_markup, parse_mode="HTML")
+    except Exception as e:
+        if "message is not modified" not in str(e).lower():
+            import traceback
+            traceback.print_exc()
+
 @router.message(F.text == "/start")
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer(format_start_menu(), reply_markup=get_start_keyboard(), parse_mode="Markdown")
+    await message.answer(format_start_menu(), reply_markup=get_start_keyboard(), parse_mode="HTML")
 
 @router.callback_query(MenuCB.filter(F.action == "start"))
 async def back_to_start(callback: CallbackQuery):
     await callback.answer()
-    await callback.message.edit_text(format_start_menu(), reply_markup=get_start_keyboard(), parse_mode="Markdown")
+    await safe_edit_text(callback, format_start_menu(), reply_markup=get_start_keyboard())
 
 @router.callback_query(MenuCB.filter(F.action == "today"))
 async def show_today_matches(callback: CallbackQuery):
-    await callback.answer()
-    await callback.message.edit_text("⏳ *LOADING MATCHES*\n\nRetrieving today's fixtures...", parse_mode="Markdown")
-    provider = APIFootballProvider(settings.api_football_key)
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-    fixtures = await provider.get_scheduled_fixtures(today)
+    await callback.answer("Loading today's matches...", show_alert=False)
+    await safe_edit_text(callback, "⏳ <b>LOADING MATCHES</b>\n\nRetrieving today's fixtures...")
     
+    try:
+        provider = APIFootballProvider(settings.api_football_key)
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        fixtures = await provider.get_scheduled_fixtures(today)
+    except Exception:
+        await safe_edit_text(callback, "⚠️ <b>UNABLE TO FETCH DATA</b>\n\nPlease tap Refresh or try again in a moment.", reply_markup=get_start_keyboard())
+        return
+        
     if not fixtures:
-        await callback.message.edit_text("⚽ *NO MATCHES FOUND*\n\nThere are no fixtures available\nfor this selection.", 
-                                         reply_markup=get_start_keyboard(), parse_mode="Markdown")
+        await safe_edit_text(callback, "⚽ <b>NO MATCHES FOUND</b>\n\nThere are no fixtures available\nfor this selection.", reply_markup=get_start_keyboard())
         return
     
     league_counts = {}
     for fx in fixtures:
         if fx.competition_id:
+            c_name = fx.competition_name or f"League {fx.competition_id}"
             if fx.competition_id not in league_counts:
-                league_counts[fx.competition_id] = (f"League {fx.competition_id}", 1)
+                league_counts[fx.competition_id] = (c_name, 1)
             else:
                 league_counts[fx.competition_id] = (league_counts[fx.competition_id][0], league_counts[fx.competition_id][1] + 1)
                 
-    text = f"⚡ *TODAY'S MATCHES*\n\n📅 {datetime.utcnow().strftime('%A, %d %B')}\n\n━━━━━━━━━━━━━━━━━━\n\nSelect a league to browse today's fixtures."
-    await callback.message.edit_text(text, reply_markup=get_leagues_keyboard(league_counts), parse_mode="Markdown")
+    text = f"⚡ <b>TODAY'S MATCHES</b>\n\n📅 {datetime.utcnow().strftime('%A, %d %B')}\n\n━━━━━━━━━━━━━━━━━━\n\nSelect a league to browse today's fixtures."
+    await safe_edit_text(callback, text, reply_markup=get_leagues_keyboard(league_counts))
 
 @router.callback_query(LeagueCB.filter())
 async def show_league_matches(callback: CallbackQuery, callback_data: LeagueCB):
-    await callback.answer()
+    await callback.answer("Organizing matches...", show_alert=False)
     lg_id = callback_data.id
     page = callback_data.page
     
-    await callback.message.edit_text("⏳ *LOADING LEAGUE FIXTURES*\n\nOrganizing matches...", parse_mode="Markdown")
+    await safe_edit_text(callback, "⏳ <b>LOADING LEAGUE FIXTURES</b>\n\nOrganizing matches...")
     
-    provider = APIFootballProvider(settings.api_football_key)
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-    all_fixtures = await provider.get_scheduled_fixtures(today)
+    try:
+        provider = APIFootballProvider(settings.api_football_key)
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        all_fixtures = await provider.get_scheduled_fixtures(today)
+    except Exception:
+        await safe_edit_text(callback, "⚠️ <b>UNABLE TO FETCH DATA</b>\n\nPlease try again in a moment.", reply_markup=get_start_keyboard())
+        return
+        
     lg_fixtures = [fx for fx in all_fixtures if fx.competition_id == lg_id]
     
     per_page = 6
@@ -277,25 +335,26 @@ async def show_league_matches(callback: CallbackQuery, callback_data: LeagueCB):
         fx_data.append({
             'id': fx.id,
             'time': fx.start_time.strftime("%H:%M") if fx.start_time else "TBC",
-            'home_name': f"Team {fx.home_team_id}", 
-            'away_name': f"Team {fx.away_team_id}",
+            'home_name': fx.home_team_name or f"Team {fx.home_team_id}", 
+            'away_name': fx.away_team_name or f"Team {fx.away_team_id}",
             'home_id': fx.home_team_id,
             'away_id': fx.away_team_id
         })
         
-    text = f"🏆 *LEAGUE {lg_id}*\n\n📅 Today's Fixtures\n\n━━━━━━━━━━━━━━━━━━\n\nSelect a match for analysis."
-    await callback.message.edit_text(text, reply_markup=get_fixtures_keyboard(fx_data, lg_id, page, total_pages), parse_mode="Markdown")
+    c_name = page_fixtures[0].competition_name if page_fixtures and page_fixtures[0].competition_name else f"LEAGUE {lg_id}"
+    text = f"🏆 <b>{c_name}</b>\n\n📅 Today's Fixtures\n\n━━━━━━━━━━━━━━━━━━\n\nSelect a match for analysis."
+    await safe_edit_text(callback, text, reply_markup=get_fixtures_keyboard(fx_data, lg_id, page, total_pages))
 
 @router.callback_query(FixtureCB.filter())
 async def select_fixture(callback: CallbackQuery, callback_data: FixtureCB):
-    await callback.answer()
+    await callback.answer("Analyzing match...", show_alert=False)
     fx_id = callback_data.id
     home_id = callback_data.hid
     away_id = callback_data.aid
     home_name = f"Team {home_id}"
     away_name = f"Team {away_id}"
     
-    text = f"""🧠 *ANALYZING MATCH*
+    text = f"""🧠 <b>ANALYZING MATCH</b>
 
 ⚽ {home_name} vs {away_name}
 
@@ -308,22 +367,42 @@ async def select_fixture(callback: CallbackQuery, callback_data: FixtureCB):
 ○ Machine-learning model
 ○ Generating insights
 
-*Analyzing available data...*"""
-    await callback.message.edit_text(text, parse_mode="Markdown")
-    await asyncio.sleep(1)
+<i>Analyzing available data...</i>"""
+    await safe_edit_text(callback, text)
+    
     try:
         provider = APIFootballProvider(settings.api_football_key)
         try:
             h2h = await provider.get_head_to_head(f"{home_id}-{away_id}")
             h2h_failed = False
+            if h2h:
+                for m in h2h:
+                    if m.home_team_id == home_id and m.home_team_name: home_name = m.home_team_name
+                    if m.home_team_id == away_id and m.home_team_name: away_name = m.home_team_name
+                    if m.away_team_id == home_id and m.away_team_name: home_name = m.away_team_name
+                    if m.away_team_id == away_id and m.away_team_name: away_name = m.away_team_name
         except Exception:
             h2h = []
             h2h_failed = True
             
+        try:
+            active_fx = await provider.get_fixture_by_id(fx_id)
+            if active_fx:
+                home_name = active_fx.home_team_name or home_name
+                away_name = active_fx.away_team_name or away_name
+                c_name = active_fx.competition_name or "Unknown League"
+                c_time = active_fx.start_time.strftime("%H:%M") if active_fx.start_time else "TBC"
+            else:
+                c_name = "Unknown League"
+                c_time = "TBC"
+        except Exception:
+            c_name = "Unknown League"
+            c_time = "TBC"
+            
         res = AnalysisResult(
             fixture_id=fx_id,
-            league="Competition",
-            time="TBC",
+            league=c_name,
+            time=c_time,
             home_name=home_name,
             away_name=away_name
         )
@@ -339,8 +418,11 @@ async def select_fixture(callback: CallbackQuery, callback_data: FixtureCB):
             for m in h2h:
                 hg = m.home_score if m.home_score is not None else 0
                 ag = m.away_score if m.away_score is not None else 0
-                mapped.append({'home_team': home_name, 'away_team': away_name, 'home_goals': hg, 'away_goals': ag, 'weight': 1.0})
-                mapped.append({'home_team': away_name, 'away_team': home_name, 'home_goals': ag, 'away_goals': hg, 'weight': 1.0})
+                
+                if m.home_team_id == home_id:
+                    mapped.append({'home_team': home_name, 'away_team': away_name, 'home_goals': hg, 'away_goals': ag, 'weight': 1.0})
+                else:
+                    mapped.append({'home_team': away_name, 'away_team': home_name, 'home_goals': hg, 'away_goals': ag, 'weight': 1.0})
             
             engine = DixonColesEngine()
             engine.fit(mapped)
@@ -351,8 +433,8 @@ async def select_fixture(callback: CallbackQuery, callback_data: FixtureCB):
                 res.draw_prob = float(np.diag(matrix).sum() * 100)
                 res.away_prob = float(matrix[np.triu_indices_from(matrix, 1)].sum() * 100)
                 
-                res.home_xg = sum(i * matrix[i, :].sum() for i in range(10))
-                res.away_xg = sum(j * matrix[:, j].sum() for j in range(10))
+                res.home_xg = float(sum(i * matrix[i, :].sum() for i in range(10)))
+                res.away_xg = float(sum(j * matrix[:, j].sum() for j in range(10)))
                 
                 res.model_name = "Statistical Poisson Model"
                 res.confidence = "Moderate" if len(h2h) >= 3 else "Low"
@@ -361,16 +443,13 @@ async def select_fixture(callback: CallbackQuery, callback_data: FixtureCB):
                 res.confidence = "—"
                 
         final_text = format_prediction_card(res)
-        await callback.message.edit_text(final_text, reply_markup=get_prediction_keyboard(fx_id, home_id, away_id), parse_mode="Markdown")
+        await safe_edit_text(callback, final_text, reply_markup=get_prediction_keyboard(fx_id, home_id, away_id))
         
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        await callback.message.edit_text(f"⚠️ *ANALYSIS UNAVAILABLE*\n\nThe match data was retrieved, but the prediction could not be generated.\n\nPlease try again.", reply_markup=get_start_keyboard(), parse_mode="Markdown")
+    except Exception:
+        await safe_edit_text(callback, f"⚠️ <b>ANALYSIS UNAVAILABLE</b>\n\nThe match data was retrieved, but the prediction could not be generated.\n\nPlease try again.", reply_markup=get_start_keyboard())
 
 @router.callback_query(AnalysisCB.filter())
 async def handle_analysis_deep_dive(callback: CallbackQuery, callback_data: AnalysisCB):
-    await callback.answer()
     action = callback_data.action
     fx_id = callback_data.fx
     hid = callback_data.hid
@@ -382,30 +461,54 @@ async def handle_analysis_deep_dive(callback: CallbackQuery, callback_data: Anal
         await select_fixture(callback, FixtureCB(id=fx_id, hid=hid, aid=aid))
         return
         
-    elif action == "form":
-        await callback.message.edit_text("⏳ *LOADING TEAM FORM*\n\nRetrieving recent performances...", parse_mode="Markdown")
-        await asyncio.sleep(0.5)
-        text = format_team_form(home_name, away_name)
-        await callback.message.edit_text(text, reply_markup=get_form_keyboard(fx_id, hid, aid, home_name, away_name), parse_mode="Markdown")
+    await callback.answer(f"Loading {action}...", show_alert=False)
+    provider = APIFootballProvider(settings.api_football_key)
+    
+    try:
+        h2h_temp = await provider.get_head_to_head(f"{hid}-{aid}")
+        if h2h_temp:
+            for m in h2h_temp:
+                if m.home_team_id == hid and m.home_team_name: home_name = m.home_team_name
+                if m.home_team_id == aid and m.home_team_name: away_name = m.home_team_name
+                if m.away_team_id == hid and m.away_team_name: home_name = m.away_team_name
+                if m.away_team_id == aid and m.away_team_name: away_name = m.away_team_name
+    except Exception:
+        pass
+    
+    if action == "form":
+        await safe_edit_text(callback, "⏳ <b>LOADING TEAM FORM</b>\n\nRetrieving recent performances...")
+        text = format_team_form(home_name, away_name, None, None)
+        await safe_edit_text(callback, text, reply_markup=get_form_keyboard(fx_id, hid, aid, home_name, away_name))
         
     elif action == "h2h":
-        await callback.message.edit_text("⏳ *LOADING HEAD-TO-HEAD*\n\nRetrieving historical meetings...", parse_mode="Markdown")
-        await asyncio.sleep(0.5)
-        text = format_h2h(home_name, away_name)
-        await callback.message.edit_text(text, reply_markup=get_h2h_keyboard(fx_id, hid, aid), parse_mode="Markdown")
+        await safe_edit_text(callback, "⏳ <b>LOADING HEAD-TO-HEAD</b>\n\nRetrieving historical meetings...")
+        try:
+            h2h = await provider.get_head_to_head(f"{hid}-{aid}")
+        except Exception:
+            h2h = []
+        text = format_h2h(home_name, away_name, h2h, hid)
+        await safe_edit_text(callback, text, reply_markup=get_h2h_keyboard(fx_id, hid, aid))
         
     elif action == "stats":
-        await callback.message.edit_text("⏳ *LOADING STATISTICS*\n\nCollecting team performance data...", parse_mode="Markdown")
-        await asyncio.sleep(0.5)
-        text = format_statistics(home_name, away_name)
-        await callback.message.edit_text(text, reply_markup=get_h2h_keyboard(fx_id, hid, aid), parse_mode="Markdown")
+        await safe_edit_text(callback, "⏳ <b>LOADING STATISTICS</b>\n\nCollecting team performance data...")
+        try:
+            stats = await provider.get_team_stats(fx_id)
+            home_stats, away_stats = {}, {}
+            for s in stats:
+                if s.team_id == hid: home_stats = s.stats
+                if s.team_id == aid: away_stats = s.stats
+        except Exception:
+            home_stats, away_stats = {}, {}
+            
+        text = format_statistics(home_name, away_name, home_stats, away_stats)
+        await safe_edit_text(callback, text, reply_markup=get_h2h_keyboard(fx_id, hid, aid))
         
     elif action == "model":
-        await callback.message.edit_text("⏳ *LOADING MODEL DETAILS*\n\nGathering prediction logic...", parse_mode="Markdown")
-        await asyncio.sleep(0.5)
+        await safe_edit_text(callback, "⏳ <b>LOADING MODEL DETAILS</b>\n\nGathering prediction logic...")
+        await asyncio.sleep(0.1)
         text = format_model_details()
-        await callback.message.edit_text(text, reply_markup=get_h2h_keyboard(fx_id, hid, aid), parse_mode="Markdown")
+        await safe_edit_text(callback, text, reply_markup=get_h2h_keyboard(fx_id, hid, aid))
 
 @router.callback_query()
 async def unhandled(callback: CallbackQuery):
-    await callback.answer("Coming Soon!")
+    await callback.answer()
