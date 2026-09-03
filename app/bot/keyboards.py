@@ -30,7 +30,8 @@ def get_leagues_keyboard(league_counts: Dict[int, tuple]) -> InlineKeyboardMarku
     builder = InlineKeyboardBuilder()
     for lg_id, (name, count) in league_counts.items():
         text = f"{name} ({count})"
-        builder.row(InlineKeyboardButton(text=text, callback_data=LeagueCB(id=lg_id, page=1).pack()))
+        builder.add(InlineKeyboardButton(text=text, callback_data=LeagueCB(id=lg_id, page=1).pack()))
+    builder.adjust(2)
     builder.row(InlineKeyboardButton(text="🔙 Home", callback_data=MenuCB(action="start").pack()))
     return builder.as_markup()
 

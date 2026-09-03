@@ -368,7 +368,13 @@ async def select_fixture(callback: CallbackQuery, callback_data: FixtureCB):
 ○ Generating insights
 
 <i>Analyzing available data...</i>"""
-    await safe_edit_text(callback, text)
+    
+    is_from_list = "Today's Fixtures" in (callback.message.text or "")
+    if is_from_list:
+        msg = await callback.message.answer(text, parse_mode="HTML")
+    else:
+        await safe_edit_text(callback, text)
+        msg = callback.message
     
     try:
         provider = APIFootballProvider(settings.api_football_key)
@@ -382,6 +388,8 @@ async def select_fixture(callback: CallbackQuery, callback_data: FixtureCB):
                     if m.away_team_id == home_id and m.away_team_name: home_name = m.away_team_name
                     if m.away_team_id == away_id and m.away_team_name: away_name = m.away_team_name
         except Exception:
+            import traceback
+            traceback.print_exc()
             h2h = []
             h2h_failed = True
             
@@ -443,10 +451,12 @@ async def select_fixture(callback: CallbackQuery, callback_data: FixtureCB):
                 res.confidence = "—"
                 
         final_text = format_prediction_card(res)
-        await safe_edit_text(callback, final_text, reply_markup=get_prediction_keyboard(fx_id, home_id, away_id))
+        await msg.edit_text(final_text, reply_markup=get_prediction_keyboard(fx_id, home_id, away_id), parse_mode="HTML")
         
     except Exception:
-        await safe_edit_text(callback, f"⚠️ <b>ANALYSIS UNAVAILABLE</b>\n\nThe match data was retrieved, but the prediction could not be generated.\n\nPlease try again.", reply_markup=get_start_keyboard())
+        import traceback
+        traceback.print_exc()
+        await msg.edit_text(f"⚠️ <b>ANALYSIS UNAVAILABLE</b>\n\nThe match data was retrieved, but the prediction could not be generated.\n\nPlease try again.", reply_markup=get_start_keyboard(), parse_mode="HTML")
 
 @router.callback_query(AnalysisCB.filter())
 async def handle_analysis_deep_dive(callback: CallbackQuery, callback_data: AnalysisCB):
