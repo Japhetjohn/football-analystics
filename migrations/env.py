@@ -25,7 +25,7 @@ from app.database.models import Base
 target_metadata = Base.metadata
 
 # Force synchronous driver for Alembic
-sync_url = settings.database_url.replace("postgresql+asyncpg", "postgresql+psycopg2")
+sync_url = settings.database_url.replace("sqlite+aiosqlite", "sqlite")
 config.set_main_option("sqlalchemy.url", sync_url)
 
 # other values from the config, defined by the needs of env.py,

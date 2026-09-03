@@ -6,7 +6,7 @@ class EvaluationEngine:
     def brier_score(predicted_probs: np.ndarray, actual_outcome: int) -> float:
         actual = np.zeros(len(predicted_probs))
         actual[actual_outcome] = 1.0
-        return np.sum((predicted_probs - actual) ** 2) / len(predicted_probs)
+        return np.sum((predicted_probs - actual) ** 2)
 
     @staticmethod
     def log_loss(predicted_probs: np.ndarray, actual_outcome: int) -> float:
